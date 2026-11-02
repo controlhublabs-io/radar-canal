@@ -1,10 +1,12 @@
-"""Radar do canal - noite 3: multiplicador de outlier.
+"""Radar do canal - noite 3: multiplicador de outlier (só vídeos longos).
 
 Busca vídeos em português sobre um termo (últimos 6 meses) e compara as views
 de cada um com a mediana dos últimos vídeos do próprio canal.
 Multiplicador = views do vídeo / mediana do canal. Outlier = 3x ou mais.
+Shorts ficam fora, tanto da busca quanto da mediana.
 """
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from statistics import median
 
@@ -17,7 +19,8 @@ API_KEY = os.getenv("YOUTUBE_API_KEY")
 BASE_URL = "https://www.googleapis.com/youtube/v3"
 
 LIMITE_OUTLIER = 3.0       # 3x a mediana do canal
-VIDEOS_POR_CANAL = 15      # quantos vídeos recentes formam a mediana
+VIDEOS_POR_CANAL = 30      # quantos uploads recentes ler (Shorts são descartados depois)
+DURACAO_MINIMA = 180       # segundos; Shorts têm até 3 minutos, então só conta acima disso
 DIAS_MINIMOS = 7           # ignora vídeos com menos de 7 dias (ainda estão crescendo)
 MINIMO_PARA_MEDIANA = 3    # com menos vídeos que isso, a mediana não é confiável
 
@@ -65,6 +68,20 @@ def views_de(video):
     return int(video["statistics"].get("viewCount", 0))
 
 
+def segundos_de(video):
+    """Converte a duração da API (formato ISO 8601, ex.: PT14M32S) em segundos."""
+    texto = video.get("contentDetails", {}).get("duration", "")
+    partes = re.fullmatch(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", texto)
+    if not partes:
+        return 0  # live em andamento ou formato desconhecido: tratamos como curto
+    dias, horas, minutos, segundos = (int(x or 0) for x in partes.groups())
+    return ((dias * 24 + horas) * 60 + minutos) * 60 + segundos
+
+
+def e_longo(video):
+    return segundos_de(video) > DURACAO_MINIMA
+
+
 def buscar_videos(termo, max_resultados=10):
     """Busca vídeos pelo termo (search.list) e devolve só os IDs.
 
@@ -88,7 +105,7 @@ def detalhes_dos_videos(ids):
     """Título, canal, data e estatísticas de vários vídeos, 50 por chamada."""
     videos = []
     for lote in em_lotes(ids):
-        dados = chamar_api("videos", {"part": "snippet,statistics", "id": ",".join(lote)})
+        dados = chamar_api("videos", {"part": "snippet,statistics,contentDetails", "id": ",".join(lote)})
         videos.extend(dados["items"])
     return videos
 
@@ -123,8 +140,10 @@ def medianas_dos_canais(canais):
 
     Usamos mediana, não média: um único viral puxa a média para cima
     e esconderia os outros outliers do mesmo canal.
-    Vídeos com menos de DIAS_MINIMOS dias ficam de fora, porque ainda
-    não tiveram tempo de juntar views e puxariam a mediana para baixo.
+    Ficam de fora: Shorts (fazem bem menos views que os vídeos longos e
+    derrubariam a mediana) e vídeos com menos de DIAS_MINIMOS dias, que
+    ainda não tiveram tempo de juntar views.
+    Devolve, por canal, a mediana e quantos vídeos entraram na conta.
     """
     ids_por_canal = {cid: ultimos_videos(info["uploads"]) for cid, info in canais.items()}
     todos_os_ids = [vid for ids in ids_por_canal.values() for vid in ids]
@@ -134,21 +153,23 @@ def medianas_dos_canais(canais):
     medianas = {}
     for cid, ids in ids_por_canal.items():
         views = [views_de(por_id[vid]) for vid in ids
-                 if vid in por_id and data_de(por_id[vid]) < limite]
-        medianas[cid] = median(views) if len(views) >= MINIMO_PARA_MEDIANA else None
+                 if vid in por_id and e_longo(por_id[vid]) and data_de(por_id[vid]) < limite]
+        mediana = median(views) if len(views) >= MINIMO_PARA_MEDIANA else None
+        medianas[cid] = (mediana, len(views))
     return medianas
 
 
 def radar(termo):
     """Roda o radar para um termo e devolve uma lista de resultados, do maior multiplicador ao menor."""
-    videos = detalhes_dos_videos(buscar_videos(termo))
+    encontrados = detalhes_dos_videos(buscar_videos(termo))
+    videos = [v for v in encontrados if e_longo(v)]  # Shorts não servem de referência para nós
     canais = dados_dos_canais({v["snippet"]["channelId"] for v in videos})
     medianas = medianas_dos_canais(canais)
 
     resultados = []
     for v in videos:
         cid = v["snippet"]["channelId"]
-        mediana = medianas.get(cid)
+        mediana, base = medianas.get(cid, (None, 0))
         views = views_de(v)
         resultados.append({
             "id": v["id"],
@@ -157,6 +178,8 @@ def radar(termo):
             "inscritos": canais.get(cid, {}).get("inscritos", 0),
             "views": views,
             "mediana": mediana,
+            "base": base,
+            "minutos": round(segundos_de(v) / 60),
             "multiplicador": round(views / mediana, 1) if mediana else None,
             "publicado": data_de(v).date().isoformat(),
         })
@@ -167,12 +190,12 @@ def radar(termo):
 
 
 def imprimir(resultados):
-    print(f"{'':2} {'mult.':>6} | {'views':>9} | {'mediana':>8} | {'inscritos':>9} | {'canal':<22} | título")
+    print(f"{'':2} {'mult.':>6} | {'views':>9} | {'mediana':>8} | {'base':>4} | {'min':>3} | {'canal':<22} | título")
     for r in resultados:
         marca = "*" if r["multiplicador"] and r["multiplicador"] >= LIMITE_OUTLIER else " "
         mult = f"{r['multiplicador']:.1f}x" if r["multiplicador"] else "  ?"
         mediana = f"{r['mediana']:,.0f}" if r["mediana"] else "?"
-        print(f"{marca:2} {mult:>6} | {r['views']:>9,} | {mediana:>8} | {r['inscritos']:>9,} | "
+        print(f"{marca:2} {mult:>6} | {r['views']:>9,} | {mediana:>8} | {r['base']:>4} | {r['minutos']:>3} | "
               f"{r['canal'][:22]:<22} | {r['titulo'][:60]}")
 
 
@@ -186,7 +209,8 @@ def main():
     print(f"Termo: {termo}\n")
     imprimir(resultados)
     outliers = sum(1 for r in resultados if r["multiplicador"] and r["multiplicador"] >= LIMITE_OUTLIER)
-    print(f"\n* = outlier ({LIMITE_OUTLIER:.0f}x ou mais a mediana do canal): {outliers} de {len(resultados)}")
+    print("\nbase = vídeos longos do canal usados na mediana; min = duração do vídeo")
+    print(f"* = outlier ({LIMITE_OUTLIER:.0f}x ou mais a mediana do canal): {outliers} de {len(resultados)}")
     print(f"Cota gasta: {cota['buscas']} busca(s) e {cota['unidades']} unidade(s) de leitura")
 
 
