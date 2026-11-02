@@ -7,4 +7,4 @@
 # Arquivos gerados pelo Python
 __pycache__/
 *.pyc
-resultados_nichos.csv
+resultados_*.csv

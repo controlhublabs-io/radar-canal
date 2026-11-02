@@ -8,18 +8,18 @@ Lê os nichos e termos de nichos.json, roda o radar em cada termo
 - quantos outliers vêm de canais pequenos (até 50 mil inscritos),
   que é o sinal de que um canal novo também consegue crescer ali.
 
-Também salva todos os vídeos em resultados_nichos.csv.
+Também salva todos os vídeos em resultados_<nome do arquivo>.csv.
 Custo aproximado: 1 busca e 25 a 35 leituras por termo.
 """
 import csv
 import json
 import sys
+from pathlib import Path
 from statistics import median
 
 import radar
 
 CANAL_PEQUENO = 50_000
-ARQUIVO_CSV = "resultados_nichos.csv"
 
 
 def resumir(resultados):
@@ -41,7 +41,11 @@ def main():
     if not radar.API_KEY:
         raise SystemExit("Faltou a YOUTUBE_API_KEY no arquivo .env")
 
-    with open("nichos.json", encoding="utf-8") as arquivo:
+    # Uso: python comparar_nichos.py [arquivo.json]  (padrão: nichos.json)
+    arquivo_nichos = sys.argv[1] if len(sys.argv) > 1 else "nichos.json"
+    arquivo_csv = "resultados_" + Path(arquivo_nichos).stem + ".csv"
+
+    with open(arquivo_nichos, encoding="utf-8") as arquivo:
         nichos = json.load(arquivo)
 
     total_termos = sum(len(termos) for termos in nichos.values())
@@ -72,11 +76,11 @@ def main():
     print(f"canais = canais diferentes entre os outliers; peq. = outliers de canais com até {CANAL_PEQUENO:,} inscritos")
     print(f"Cota gasta: {radar.cota['buscas']} busca(s) e {radar.cota['unidades']} unidade(s) de leitura")
 
-    with open(ARQUIVO_CSV, "w", newline="", encoding="utf-8-sig") as arquivo:
+    with open(arquivo_csv, "w", newline="", encoding="utf-8-sig") as arquivo:
         escritor = csv.DictWriter(arquivo, fieldnames=list(linhas_csv[0].keys()), delimiter=";")
         escritor.writeheader()
         escritor.writerows(linhas_csv)
-    print(f"Detalhe de cada vídeo salvo em {ARQUIVO_CSV}")
+    print(f"Detalhe de cada vídeo salvo em {arquivo_csv}")
 
 
 if __name__ == "__main__":
