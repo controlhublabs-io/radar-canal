@@ -159,9 +159,9 @@ def medianas_dos_canais(canais):
     return medianas
 
 
-def radar(termo):
+def radar(termo, max_resultados=10):
     """Roda o radar para um termo e devolve uma lista de resultados, do maior multiplicador ao menor."""
-    encontrados = detalhes_dos_videos(buscar_videos(termo))
+    encontrados = detalhes_dos_videos(buscar_videos(termo, max_resultados))
     videos = [v for v in encontrados if e_longo(v)]  # Shorts não servem de referência para nós
     canais = dados_dos_canais({v["snippet"]["channelId"] for v in videos})
     medianas = medianas_dos_canais(canais)
