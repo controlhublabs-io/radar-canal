@@ -34,7 +34,7 @@ Por isso o radar faz poucas buscas e muitas leituras em lote.
 
 - [x] Noite 1: chave da API criada e testada
 - [x] Noite 2: primeira busca (`radar.py`)
-- [ ] Noite 3: média do canal e multiplicador
+- [x] Noite 3: mediana do canal e multiplicador de outlier
 - [ ] Noite 4: gravar no Notion sem duplicar
 - [ ] Noite 5: palavras-chave das 20 ideias, filtros e controle de cota
 - [ ] Noite 6: execução semanal com GitHub Actions
