@@ -1,0 +1,9 @@
+# Segredos: nunca vão para o Git
+.env
+
+# Ambiente virtual do Python
+.venv/
+
+# Arquivos gerados pelo Python
+__pycache__/
+*.pyc
