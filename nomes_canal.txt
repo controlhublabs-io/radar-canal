@@ -1,0 +1,21 @@
+# Um nome por linha. Linhas com # são ignoradas.
+Ponto de Fuga
+Fora do Mapa
+Além do Mapa
+Mapa Livre
+Rota Livre
+Zona Livre
+Terra Aberta
+Reino Aberto
+Mundo Vivo
+Rolê Aberto
+Rolê Livre
+Sem Fronteira
+Linha do Horizonte
+Horizonte Gamer
+Nômade Gamer
+Free Roam BR
+Explora Games
+Mapa Inteiro
+Vasto Games
+Estrada Sem Fim
